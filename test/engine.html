@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Engine test — particle-portrait.js</title>
+		<style>
+			:root {
+				--bg: #ffffff;
+				--fg: #0a0a0a;
+				--muted: #6b6b6b;
+				--line: rgba(10, 10, 10, 0.16);
+				color-scheme: light;
+			}
+			:root.dark {
+				--bg: #0a0a0a;
+				--fg: #f2f2f2;
+				--muted: #8c8c8c;
+				--line: rgba(242, 242, 242, 0.16);
+				color-scheme: dark;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--fg);
+				font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+			}
+			main {
+				display: grid;
+				grid-template-columns: minmax(0, 1fr) 300px;
+				min-height: 100vh;
+			}
+			#portrait {
+				position: relative;
+				height: 100vh;
+				border-right: 1px solid var(--line);
+			}
+			aside {
+				display: grid;
+				align-content: start;
+				gap: 14px;
+				padding: 16px;
+			}
+			h1 {
+				margin: 0;
+				font-size: 13px;
+				text-transform: uppercase;
+				letter-spacing: 0.06em;
+			}
+			fieldset {
+				display: grid;
+				gap: 8px;
+				margin: 0;
+				padding: 10px;
+				border: 1px solid var(--line);
+			}
+			legend {
+				color: var(--muted);
+				text-transform: uppercase;
+			}
+			label {
+				display: grid;
+				grid-template-columns: 90px 1fr 44px;
+				align-items: center;
+				gap: 8px;
+			}
+			label.check {
+				grid-template-columns: auto 1fr;
+			}
+			.row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+			}
+			button {
+				padding: 6px 10px;
+				border: 1px solid var(--fg);
+				background: transparent;
+				color: inherit;
+				font: inherit;
+				cursor: pointer;
+			}
+			button:hover {
+				background: var(--fg);
+				color: var(--bg);
+			}
+			output,
+			#stats {
+				color: var(--muted);
+			}
+			.spacer {
+				height: 120vh;
+				display: grid;
+				place-items: center;
+				color: var(--muted);
+				border-top: 1px solid var(--line);
+			}
+			@media (max-width: 768px) {
+				main {
+					grid-template-columns: 1fr;
+				}
+				#portrait {
+					height: 70vh;
+					border-right: 0;
+					border-bottom: 1px solid var(--line);
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<div id="portrait"></div>
+			<aside>
+				<h1>particle-portrait.js — test</h1>
+				<div id="stats">Loading…</div>
+
+				<fieldset>
+					<legend>Theme</legend>
+					<div class="row">
+						<button data-theme-set="auto">auto</button>
+						<button data-theme-set="light">light</button>
+						<button data-theme-set="dark">dark</button>
+						<button id="page-theme">toggle html.dark</button>
+					</div>
+				</fieldset>
+
+				<fieldset>
+					<legend>Images</legend>
+					<div class="row">
+						<button id="replay">replay intro</button>
+						<button id="next">next</button>
+						<button id="one">only image 1</button>
+						<button id="both">both images</button>
+					</div>
+					<label class="check"><input type="checkbox" id="auto" checked /> auto morph</label>
+				</fieldset>
+
+				<fieldset>
+					<legend>Look</legend>
+					<label>density <input type="range" data-opt="density" min="120" max="360" step="10" value="150" /><output></output></label>
+					<label>sharpen <input type="range" data-opt="sharpen" min="0" max="3" step="0.1" value="1.1" /><output></output></label>
+					<label>pointSize <input type="range" data-opt="pointSize" min="0.5" max="2.5" step="0.1" value="1" /><output></output></label>
+					<label>fill <input type="range" data-opt="fill" min="0.5" max="1.2" step="0.05" value="0.9" /><output></output></label>
+					<label>edgeFade <input type="range" data-opt="edgeFade" min="0" max="1" step="0.05" value="1" /><output></output></label>
+					<label>shimmer <input type="range" data-opt="shimmer" min="0" max="2" step="0.1" value="1" /><output></output></label>
+					<label>mouseRepel <input type="range" data-opt="mouseRepel" min="0" max="200" step="5" value="90" /><output></output></label>
+					<label>tilt <input type="range" data-opt="tilt" min="0" max="15" step="1" value="4" /><output></output></label>
+					<label>dust <input type="range" data-opt="dust" min="0" max="600" step="20" value="160" /><output></output></label>
+					<div class="row">
+						<button data-align="left">left</button>
+						<button data-align="center">center</button>
+						<button data-align="right">right</button>
+					</div>
+					<label class="check"><input type="checkbox" id="scroll" checked /> scrollScatter</label>
+				</fieldset>
+
+				<fieldset>
+					<legend>Lifecycle</legend>
+					<div class="row">
+						<button id="recreate">destroy + create</button>
+						<button id="stress">create/destroy ×30</button>
+					</div>
+					<div id="lifecycle">—</div>
+				</fieldset>
+			</aside>
+		</main>
+		<div class="spacer">Scroll — the portrait should scatter as it leaves the viewport</div>
+
+		<script type="module">
+			import { createPortrait } from '@engine/particle-portrait.js';
+
+			const container = document.getElementById('portrait');
+			const stats = document.getElementById('stats');
+			const IMAGES = ['/samples/sample-portrait.png', '/samples/sample-portrait-2.png'];
+
+			let options = { image: IMAGES };
+			let portrait = null;
+
+			function create() {
+				const started = performance.now();
+				portrait = createPortrait(container, {
+					...options,
+					onReady: () => console.log(`[pp-test] first frame after ${Math.round(performance.now() - started)}ms`),
+					onShow: (index) => console.log(`[pp-test] showing image ${index + 1}`)
+				});
+			}
+
+			create();
+
+			// FPS + particle count readout
+			let frames = 0;
+			let since = performance.now();
+			(function loop(now) {
+				frames++;
+				if (now - since >= 500) {
+					const fps = Math.round((frames * 1000) / (now - since));
+					stats.textContent = `${fps} fps · ${portrait ? portrait.count.toLocaleString('en-US') : 0} particles · image ${portrait ? portrait.index + 1 : '-'}`;
+					frames = 0;
+					since = now;
+				}
+				requestAnimationFrame(loop);
+			})(since);
+
+			function set(patch) {
+				options = { ...options, ...patch };
+				portrait?.update(patch);
+			}
+
+			document.querySelectorAll('[data-theme-set]').forEach((button) =>
+				button.addEventListener('click', () => {
+					options.theme = button.dataset.themeSet;
+					portrait?.setTheme(button.dataset.themeSet);
+				})
+			);
+			document.getElementById('page-theme').addEventListener('click', () => {
+				const dark = !document.documentElement.classList.contains('dark');
+				document.documentElement.classList.toggle('dark', dark);
+				document.documentElement.classList.toggle('light', !dark);
+			});
+
+			document.getElementById('replay').addEventListener('click', () => portrait?.replay());
+			document.getElementById('next').addEventListener('click', () => portrait?.next());
+			document.getElementById('one').addEventListener('click', () => set({ image: IMAGES[0] }));
+			document.getElementById('both').addEventListener('click', () => set({ image: IMAGES }));
+			document.getElementById('auto').addEventListener('change', (event) =>
+				set({ morph: { auto: event.target.checked } })
+			);
+			document.getElementById('scroll').addEventListener('change', (event) =>
+				set({ scrollScatter: event.target.checked })
+			);
+			document.querySelectorAll('[data-align]').forEach((button) =>
+				button.addEventListener('click', () => set({ align: button.dataset.align }))
+			);
+
+			document.querySelectorAll('input[data-opt]').forEach((input) => {
+				const output = input.parentElement.querySelector('output');
+				const show = () => (output.textContent = input.value);
+				show();
+				input.addEventListener('input', () => {
+					show();
+					set({ [input.dataset.opt]: Number(input.value) });
+				});
+			});
+
+			const lifecycle = document.getElementById('lifecycle');
+			document.getElementById('recreate').addEventListener('click', () => {
+				portrait?.destroy();
+				create();
+				lifecycle.textContent = `recreated · canvases in container: ${container.querySelectorAll('canvas').length}`;
+			});
+			document.getElementById('stress').addEventListener('click', () => {
+				for (let i = 0; i < 30; i++) {
+					portrait?.destroy();
+					create();
+				}
+				lifecycle.textContent = `30 cycles done · canvases in container: ${container.querySelectorAll('canvas').length} (should be 1) · check console for "Too many active WebGL contexts"`;
+			});
+		</script>
+	</body>
+</html>
