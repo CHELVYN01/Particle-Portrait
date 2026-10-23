@@ -14,6 +14,11 @@
 	import { defaultSettings, type Settings } from '#lib/settings/defaults.ts';
 	import { loadSettings, saveSettings } from '#lib/settings/storage.ts';
 
+	const SITE_URL = 'https://particle.chelvynkleden.com';
+	const TITLE = 'Particle Portrait — turn a photo into a Three.js particle portrait';
+	const DESCRIPTION =
+		'Upload a photo, turn it into a living Three.js particle portrait, and export a ready-to-use JavaScript file. Runs entirely in your browser.';
+
 	const SAMPLES = ['/samples/sample-portrait.png', '/samples/sample-portrait-2.png'];
 	const MAX_PHOTOS = 3;
 
@@ -143,11 +148,25 @@
 </script>
 
 <svelte:head>
-	<title>Particle Portrait — turn a photo into a Three.js particle portrait</title>
-	<meta
-		name="description"
-		content="Upload a photo, turn it into a living Three.js particle portrait, and export a ready-to-use JavaScript file. Runs entirely in your browser."
-	/>
+	<title>{TITLE}</title>
+	<meta name="description" content={DESCRIPTION} />
+	<link rel="canonical" href="{SITE_URL}/" />
+
+	<!-- Link previews (WhatsApp, X, Threads, LinkedIn, Slack…). Crawlers need absolute URLs. -->
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Particle Portrait" />
+	<meta property="og:url" content="{SITE_URL}/" />
+	<meta property="og:title" content={TITLE} />
+	<meta property="og:description" content={DESCRIPTION} />
+	<meta property="og:image" content="{SITE_URL}/og.jpg" />
+	<meta property="og:image:type" content="image/jpeg" />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:alt" content="A face made of thousands of white particles next to the words: Turn a photo into a living particle portrait." />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={TITLE} />
+	<meta name="twitter:description" content={DESCRIPTION} />
+	<meta name="twitter:image" content="{SITE_URL}/og.jpg" />
 </svelte:head>
 
 {#snippet jobCard()}
