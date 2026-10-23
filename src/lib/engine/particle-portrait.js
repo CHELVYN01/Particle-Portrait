@@ -1,7 +1,7 @@
 /*!
  * particle-portrait.js
  * A living particle portrait for your website, rendered with three.js.
- * Made with https://particle.chelvynkleden.com
+ * Made with https://particle-portrait.chelvynkleden.com
  *
  * MIT License — free to use, modify and ship.
  *

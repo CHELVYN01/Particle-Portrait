@@ -14,7 +14,7 @@
 	import { defaultSettings, type Settings } from '#lib/settings/defaults.ts';
 	import { loadSettings, saveSettings } from '#lib/settings/storage.ts';
 
-	const SITE_URL = 'https://particle.chelvynkleden.com';
+	const SITE_URL = 'https://particle-portrait.chelvynkleden.com';
 	const TITLE = 'Particle Portrait — turn a photo into a Three.js particle portrait';
 	const DESCRIPTION =
 		'Upload a photo, turn it into a living Three.js particle portrait, and export a ready-to-use JavaScript file. Runs entirely in your browser.';

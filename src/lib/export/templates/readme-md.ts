@@ -92,7 +92,7 @@ ${snippet.code}
 
 A living particle portrait for your website, rendered with three.js. ${photos} and your settings are built into \`particle-portrait.js\` (${kb} KB).
 
-Made with [particle.chelvynkleden.com](https://particle.chelvynkleden.com).
+Made with [particle-portrait.chelvynkleden.com](https://particle-portrait.chelvynkleden.com).
 
 ## What's in this folder
 

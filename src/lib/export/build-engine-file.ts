@@ -90,7 +90,7 @@ function header({ images, three }: EngineInput, language: EngineLanguage) {
 			: '';
 	return `/*!
  * ${file} — a living particle portrait, rendered with three.js.
- * Made with https://particle.chelvynkleden.com
+ * Made with https://particle-portrait.chelvynkleden.com
  * MIT License — free to use, modify and ship.
  *
  * Generated ${date} · ${photos} embedded.
