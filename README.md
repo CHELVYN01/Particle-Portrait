@@ -16,6 +16,7 @@ Your photo never leaves your device. There is no upload, no server-side processi
 - **Background removal.** On-device person segmentation with [MediaPipe](https://ai.google.dev/edge/mediapipe) (Selfie Segmenter). The model and the WASM runtime are self-hosted, with no third-party CDN at runtime. It is optional: skip it if your photo already has a transparent background.
 - **Live editor.** Density, sharpening, auto-levels, brightness, contrast, particle size, light and dark palettes, opacity, alignment, edge fade, intro, morph timing, cursor repel, tilt, scroll scatter, shimmer, dust and mobile behavior.
 - **Presets.** Subtle, Bold, Ghost and Ink as starting points.
+- **Share settings.** "Copy share link" puts your settings in the URL hash (`#s=...`). Anyone who opens it gets the same look to try on their own photo. The hash never reaches a server and your photo is never included.
 - **Multi-photo morphing.** Add several portraits and the particles flow from one into the next.
 - **Light and dark themes.** The engine follows `prefers-color-scheme`, a `dark` or `light` class, or `data-theme` on `<html>`.
 - **Export.** A zip with the engine, your photo(s) and settings baked in, an `index.html` demo, framework snippets and a README. three.js can come from a CDN (plain HTML works with nothing else) or from npm (for bundlers).

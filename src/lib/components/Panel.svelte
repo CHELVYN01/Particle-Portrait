@@ -5,6 +5,7 @@
 	import Toggle from './controls/Toggle.svelte';
 	import { defaultSettings, type Settings } from '#lib/settings/defaults.ts';
 	import { PRESETS, matchPreset, presetSettings } from '#lib/settings/presets.ts';
+	import { encodeSettings } from '#lib/settings/share.ts';
 
 	type Props = {
 		settings: Settings;
@@ -16,6 +17,22 @@
 
 	let active = $derived(matchPreset(settings));
 	let isDefault = $derived(JSON.stringify(settings) === JSON.stringify(defaultSettings()));
+
+	let shareLabel = $state('Copy share link');
+	let shareTimer: ReturnType<typeof setTimeout> | undefined;
+
+	async function share() {
+		const url = location.origin + location.pathname + encodeSettings($state.snapshot(settings) as Settings);
+		try {
+			await navigator.clipboard.writeText(url);
+			shareLabel = 'Link copied';
+		} catch {
+			shareLabel = "Couldn't copy";
+			console.error('Clipboard unavailable. Link:', url);
+		}
+		clearTimeout(shareTimer);
+		shareTimer = setTimeout(() => (shareLabel = 'Copy share link'), 2500);
+	}
 
 	// Presets and reset keep the alt text and theme lock — those describe the site, not the look.
 	function apply(next: Settings) {
@@ -42,9 +59,13 @@
 				</button>
 			{/each}
 		</div>
-		<button type="button" class="btn ghost" disabled={isDefault} onclick={() => apply(defaultSettings())}>
-			Reset to defaults
-		</button>
+		<div class="row">
+			<button type="button" class="btn ghost" disabled={isDefault} onclick={() => apply(defaultSettings())}>
+				Reset to defaults
+			</button>
+			<button type="button" class="btn ghost" onclick={share} aria-live="polite">{shareLabel}</button>
+		</div>
+		<p class="hint">The link carries these settings only. Your photo is never included.</p>
 	</section>
 
 	<section class="group" aria-labelledby="group-particles">
@@ -282,6 +303,16 @@
 	.field input:focus {
 		border-color: var(--fg);
 		outline: none;
+	}
+
+	.row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.row .btn {
+		flex: 1;
 	}
 
 	.hint {

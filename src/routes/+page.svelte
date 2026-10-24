@@ -12,6 +12,7 @@
 		type ProcessedPhoto
 	} from '#lib/pipeline/index.ts';
 	import { defaultSettings, type Settings } from '#lib/settings/defaults.ts';
+	import { decodeSettings } from '#lib/settings/share.ts';
 	import { loadSettings, saveSettings } from '#lib/settings/storage.ts';
 
 	const SITE_URL = 'https://particle-portrait.chelvynkleden.com';
@@ -46,6 +47,7 @@
 	let photos = $state<PhotoEntry[]>([]);
 	let job = $state<Job | null>(null);
 	let skipBackground = $state(false);
+	let sharedLoaded = $state(false);
 	let settings = $state<Settings>(defaultSettings());
 
 	let run = 0;
@@ -59,8 +61,23 @@
 
 	// Settings (never the photos) survive a refresh.
 	$effect(() => {
-		settings = loadSettings();
+		/** Applies a share link if the URL holds one. */
+		function applyShared() {
+			const shared = decodeSettings(location.hash);
+			if (!shared) return false;
+			// Applied once; drop the hash so a later refresh doesn't undo the user's edits.
+			history.replaceState(null, '', location.pathname + location.search);
+			settings = shared;
+			sharedLoaded = true;
+			return true;
+		}
+
+		if (!applyShared()) settings = loadSettings();
 		settingsLoaded = true;
+
+		// Pasting a link into a tab that is already open only changes the hash: no reload.
+		window.addEventListener('hashchange', applyShared);
+		return () => window.removeEventListener('hashchange', applyShared);
 	});
 
 	$effect(() => {
@@ -240,7 +257,7 @@
 		<section class="preview" aria-label="Preview">
 			<Preview
 				{sources}
-				settings={editing ? settings : undefined}
+				settings={editing || sharedLoaded ? settings : undefined}
 				label={editing ? 'Your portrait' : 'Sample'}
 				tools={editing}
 				onshow={onPreviewShow}
@@ -314,6 +331,12 @@
 					own site.
 				</p>
 
+				{#if sharedLoaded}
+					<p class="mono shared-note" role="status">
+						Shared settings loaded. Add your photo to try them on yourself.
+					</p>
+				{/if}
+
 				{#if job}
 					{@render jobCard()}
 				{/if}
@@ -371,6 +394,13 @@
 		display: flex;
 		align-items: center;
 		gap: 16px;
+	}
+
+	.shared-note {
+		padding: 10px 12px;
+		border: 1px solid var(--line-strong);
+		text-transform: none;
+		letter-spacing: 0.02em;
 	}
 
 	.github {
