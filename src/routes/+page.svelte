@@ -372,14 +372,21 @@
 </div>
 
 <style>
+	/* A flex column, not a grid: sticky items in their own grid rows can't leave their cell. */
 	.shell {
-		display: grid;
-		grid-template-rows: var(--header-h) 1fr auto;
+		display: flex;
+		flex-direction: column;
 		min-height: 100dvh;
 	}
 
 	/* Header */
 	.header {
+		position: sticky;
+		top: 0;
+		z-index: 20;
+		flex: none;
+		height: var(--header-h);
+		box-sizing: border-box;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -419,14 +426,15 @@
 
 	/* Main: preview left, panel right */
 	.main {
+		flex: 1;
 		display: grid;
 		grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr);
 	}
 
 	.preview {
 		position: sticky;
-		top: 0;
-		height: calc(100dvh - var(--header-h));
+		top: var(--header-h);
+		height: calc(100dvh - var(--header-h) - var(--footer-h));
 		border-right: 1px solid var(--line);
 	}
 
@@ -698,8 +706,15 @@
 
 	/* Footer */
 	.footer {
+		position: sticky;
+		bottom: 0;
+		z-index: 20;
+		flex: none;
+		min-height: var(--footer-h);
+		box-sizing: border-box;
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		justify-content: space-between;
 		gap: 8px 16px;
 		padding: 14px var(--gutter);

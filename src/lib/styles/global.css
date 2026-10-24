@@ -14,6 +14,7 @@
 	--grid-size: 32px;
 	--gutter: clamp(16px, 3vw, 32px);
 	--header-h: 56px;
+	--footer-h: 49px;
 
 	color-scheme: light;
 }
