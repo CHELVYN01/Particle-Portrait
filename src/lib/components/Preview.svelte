@@ -7,6 +7,7 @@
 		type Portrait,
 		type PortraitOptionsInput
 	} from '#lib/engine/particle-portrait.js';
+	import { RecordError, canRecordVideo, downloadVideo, recordVideo } from '#lib/export/record-video.ts';
 	import { defaultSettings, type Settings } from '#lib/settings/defaults.ts';
 
 	type PreviewTheme = 'auto' | 'light' | 'dark';
@@ -30,6 +31,7 @@
 	const RESAMPLE_KEYS = ['density', 'sharpen', 'edgeFade', 'autoLevels'] as const;
 
 	let stage: HTMLElement | undefined = $state();
+	let frameEl: HTMLElement | undefined = $state();
 	let portrait: Portrait | null = $state(null);
 	let count = $state(0);
 	let current = $state(0);
@@ -57,6 +59,49 @@
 		settings && settings.theme !== 'auto' ? settings.theme : previewTheme
 	);
 
+	// Video export
+	const LENGTHS = [
+		{ value: '5', label: '5 s' },
+		{ value: '10', label: '10 s' },
+		{ value: '15', label: '15 s' }
+	];
+	let canRecord = $state(false);
+	let length = $state('10');
+	let recording = $state(false);
+	let elapsed = $state(0);
+	let recordMessage = $state('');
+
+	$effect(() => {
+		canRecord = canRecordVideo();
+	});
+
+	async function record() {
+		const canvas = stage?.querySelector('canvas');
+		if (!portrait || !canvas || !frameEl || recording) return;
+		const seconds = Number(length);
+		recording = true;
+		elapsed = 0;
+		recordMessage = '';
+		try {
+			// Start from the intro so the video opens with the particles gathering.
+			portrait.replay();
+			const style = getComputedStyle(frameEl);
+			const video = await recordVideo({
+				source: canvas,
+				background: style.getPropertyValue('--bg').trim() || style.backgroundColor,
+				seconds,
+				onProgress: (value) => (elapsed = value)
+			});
+			downloadVideo(video);
+			recordMessage = `Saved particle-portrait.${video.extension}`;
+		} catch (error) {
+			if (!(error instanceof RecordError)) console.error(error);
+			recordMessage = error instanceof RecordError ? error.message : 'Recording failed. Try again.';
+		} finally {
+			recording = false;
+		}
+	}
+
 	$effect(() => {
 		if (!stage) return;
 		const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -66,6 +111,8 @@
 
 		const instance = createPortrait(stage, {
 			...untrack(() => options),
+			// Lets the preview be recorded to video.
+			preserveDrawingBuffer: true,
 			image: untrack(() => sources),
 			alt: 'Particle portrait preview',
 			onShow: (index) => {
@@ -136,11 +183,12 @@
 		class="frame theme-{frameTheme}"
 		class:framed={device !== 'desktop'}
 		style="--frame-width: {tools ? DEVICE_WIDTH[device] : '100%'}"
+		bind:this={frameEl}
 	>
 		<div class="canvas" class:hidden={stillOnly} bind:this={stage}></div>
 		{#if stillOnly}
 			<div class="still">
-				<img src={sources[current] ?? sources[0]} alt="" />
+				<img class:gray={settings?.colorMode !== 'photo'} src={sources[current] ?? sources[0]} alt="" />
 				<p class="mono">Phones see this still image (Run on phones is off)</p>
 			</div>
 		{/if}
@@ -194,7 +242,26 @@
 					{ value: 'mobile', label: 'Mobile' }
 				]}
 			/>
+			{#if canRecord}
+				<div class="record">
+					<Segmented label="Video length" compact bind:value={length} options={LENGTHS} />
+					<button
+						type="button"
+						class="btn ghost"
+						disabled={recording || !count || !motion || stillOnly}
+						onclick={record}
+						title={motion ? 'Record the preview as a video' : 'Turned off: reduced motion is on'}
+					>
+						{recording ? `Recording ${elapsed.toFixed(1)} / ${length} s` : 'Record video'}
+					</button>
+				</div>
+			{/if}
 		</div>
+		{#if recording || recordMessage}
+			<p class="mono record-note" role="status">
+				{recording ? 'Keep this tab in front while recording.' : recordMessage}
+			</p>
+		{/if}
 	{:else}
 		<figcaption class="label bottom-left mono">Move your cursor through it</figcaption>
 	{/if}
@@ -269,6 +336,9 @@
 		max-width: 92%;
 		max-height: 88%;
 		object-fit: contain;
+	}
+
+	.still img.gray {
 		filter: grayscale(1);
 	}
 
@@ -343,6 +413,22 @@
 		flex-wrap: wrap;
 		justify-content: space-between;
 		gap: 8px;
+	}
+
+	.record {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.record-note {
+		position: absolute;
+		left: var(--gutter);
+		bottom: 52px;
+		color: var(--muted);
+		text-transform: none;
+		letter-spacing: 0.02em;
 	}
 
 	@media (max-width: 899px) {

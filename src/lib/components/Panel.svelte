@@ -6,6 +6,17 @@
 	import { defaultSettings, type Settings } from '#lib/settings/defaults.ts';
 	import { PRESETS, matchPreset, presetSettings } from '#lib/settings/presets.ts';
 	import { encodeSettings } from '#lib/settings/share.ts';
+	import {
+		MAX_NAME,
+		MAX_PRESETS,
+		addUserPreset,
+		loadUserPresets,
+		presetsFromFile,
+		presetsToFile,
+		removeUserPreset,
+		saveUserPresets
+	} from '#lib/settings/user-presets.ts';
+	import type { Preset } from '#lib/settings/presets.ts';
 
 	type Props = {
 		settings: Settings;
@@ -15,8 +26,85 @@
 
 	let { settings = $bindable(), photoCount }: Props = $props();
 
-	let active = $derived(matchPreset(settings));
+	let saved = $state<Preset[]>([]);
+	let active = $derived(matchPreset(settings, saved));
 	let isDefault = $derived(JSON.stringify(settings) === JSON.stringify(defaultSettings()));
+
+	let naming = $state(false);
+	let newName = $state('');
+	let armedDelete = $state('');
+	let armTimer: ReturnType<typeof setTimeout> | undefined;
+	let presetNote = $state('');
+	let noteTimer: ReturnType<typeof setTimeout> | undefined;
+	let importInput: HTMLInputElement | undefined = $state();
+
+	$effect(() => {
+		saved = loadUserPresets();
+	});
+
+	function note(message: string) {
+		presetNote = message;
+		clearTimeout(noteTimer);
+		noteTimer = setTimeout(() => (presetNote = ''), 3500);
+	}
+
+	function commit(list: Preset[]) {
+		saved = list;
+		saveUserPresets(list);
+	}
+
+	function startNaming() {
+		newName = '';
+		naming = true;
+	}
+
+	function savePreset() {
+		const replaces = saved.some((item) => item.name.toLowerCase() === newName.trim().toLowerCase());
+		if (!replaces && saved.length >= MAX_PRESETS) {
+			note(`You can keep up to ${MAX_PRESETS} presets. Delete one first.`);
+			return;
+		}
+		const next = addUserPreset(saved, newName, $state.snapshot(settings) as Settings);
+		if (!next) return;
+		commit(next);
+		note(replaces ? 'Preset updated' : 'Preset saved');
+		naming = false;
+	}
+
+	function removePreset(id: string) {
+		// First click arms the button, second deletes.
+		if (armedDelete !== id) {
+			armedDelete = id;
+			clearTimeout(armTimer);
+			armTimer = setTimeout(() => (armedDelete = ''), 3000);
+			return;
+		}
+		armedDelete = '';
+		commit(removeUserPreset(saved, id));
+	}
+
+	function exportPresets() {
+		const blob = new Blob([presetsToFile(saved)], { type: 'application/json' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = 'particle-portrait-presets.json';
+		document.body.append(link);
+		link.click();
+		link.remove();
+		setTimeout(() => URL.revokeObjectURL(url), 10_000);
+	}
+
+	async function importPresets(event: Event & { currentTarget: HTMLInputElement }) {
+		const file = event.currentTarget.files?.[0];
+		event.currentTarget.value = '';
+		if (!file) return;
+		if (file.size > 256 * 1024) return note("That file is too big to be a preset file.");
+		const result = presetsFromFile(saved, await file.text());
+		if (!result) return note("That isn't a Particle Portrait preset file.");
+		commit(result.list);
+		note(`${result.added} preset${result.added === 1 ? '' : 's'} imported`);
+	}
 
 	let shareLabel = $state('Copy share link');
 	let shareTimer: ReturnType<typeof setTimeout> | undefined;
@@ -47,18 +135,73 @@
 			<span class="mono muted">{active ? active.name : 'Custom'}</span>
 		</div>
 		<div class="presets">
-			{#each PRESETS as preset (preset.id)}
-				<button
-					type="button"
-					class="preset"
-					aria-pressed={active?.id === preset.id}
-					onclick={() => apply(presetSettings(preset))}
-				>
-					<span class="preset-name">{preset.name}</span>
-					<span class="preset-text">{preset.description}</span>
-				</button>
+			{#each [...PRESETS, ...saved] as preset (preset.id)}
+				<div class="preset-cell">
+					<button
+						type="button"
+						class="preset"
+						aria-pressed={active?.id === preset.id}
+						onclick={() => apply(presetSettings(preset))}
+					>
+						<span class="preset-name">{preset.name}</span>
+						<span class="preset-text">{preset.description}</span>
+					</button>
+					{#if preset.custom}
+						<button
+							type="button"
+							class="preset-delete mono"
+							class:armed={armedDelete === preset.id}
+							aria-label={armedDelete === preset.id ? `Confirm: delete preset ${preset.name}` : `Delete preset ${preset.name}`}
+							onclick={() => removePreset(preset.id)}
+						>
+							{armedDelete === preset.id ? 'Delete?' : '×'}
+						</button>
+					{/if}
+				</div>
 			{/each}
 		</div>
+
+		{#if naming}
+			<form
+				class="name-form"
+				onsubmit={(event) => {
+					event.preventDefault();
+					savePreset();
+				}}
+			>
+				<input
+					type="text"
+					bind:value={newName}
+					maxlength={MAX_NAME}
+					placeholder="Preset name"
+					aria-label="Preset name"
+					onkeydown={(event) => event.key === 'Escape' && (naming = false)}
+					{@attach (node) => node.focus()}
+				/>
+				<button type="submit" class="btn" disabled={!newName.trim()}>Save</button>
+				<button type="button" class="btn ghost" onclick={() => (naming = false)}>Cancel</button>
+			</form>
+		{:else}
+			<div class="row">
+				<button type="button" class="btn ghost" onclick={startNaming}>Save as preset</button>
+				<button type="button" class="btn ghost" disabled={!saved.length} onclick={exportPresets}>
+					Export presets
+				</button>
+				<button type="button" class="btn ghost" onclick={() => importInput?.click()}>Import presets</button>
+			</div>
+		{/if}
+		<input
+			bind:this={importInput}
+			type="file"
+			accept="application/json,.json"
+			class="visually-hidden"
+			tabindex="-1"
+			aria-hidden="true"
+			onchange={importPresets}
+		/>
+		<p class="hint" role="status" aria-live="polite">
+			{presetNote || 'Saved presets stay in this browser. Same name replaces a preset. Your photo is never saved.'}
+		</p>
 		<div class="row">
 			<button type="button" class="btn ghost" disabled={isDefault} onclick={() => apply(defaultSettings())}>
 				Reset to defaults
@@ -78,6 +221,19 @@
 			step={10}
 			unit=" px"
 			hint="Sample width. Higher is finer and heavier."
+		/>
+		<Segmented
+			label="Shape"
+			columns={3}
+			bind:value={settings.shape}
+			options={[
+				{ value: 'square', label: 'Square' },
+				{ value: 'circle', label: 'Circle' },
+				{ value: 'diamond', label: 'Diamond' },
+				{ value: 'plus', label: 'Plus' },
+				{ value: 'line', label: 'Line' },
+				{ value: 'ascii', label: 'ASCII' }
+			]}
 		/>
 		<Slider label="Point size" bind:value={settings.pointSize} min={0.5} max={2.5} step={0.05} unit="×" />
 		<Slider label="Sharpen" bind:value={settings.sharpen} min={0} max={3} step={0.1} />
@@ -130,6 +286,26 @@
 				{ value: 'dark', label: 'Always dark' }
 			]}
 		/>
+		<Segmented
+			label="Particle color"
+			bind:value={settings.colorMode}
+			options={[
+				{ value: 'palette', label: 'Palette' },
+				{ value: 'photo', label: 'Photo colors' }
+			]}
+		/>
+		{#if settings.colorMode === 'photo'}
+			<p class="hint">Particles keep the colors of your photo. The palette below then only tints the floating dust.</p>
+			<Slider
+				label="Color strength"
+				bind:value={settings.colorStrength}
+				min={0.5}
+				max={2.5}
+				step={0.1}
+				unit="×"
+				hint="Raise it if pale areas such as skin look washed out."
+			/>
+		{/if}
 		<div class="palette">
 			<p class="mono muted">Light theme</p>
 			<ColorField label="Main" bind:value={settings.colors.light.main} />
@@ -150,14 +326,31 @@
 		{#if settings.intro.enabled}
 			<Slider label="Intro duration" bind:value={settings.intro.duration} min={1} max={6} step={0.1} unit=" s" />
 		{/if}
+		<Segmented
+			label="Cursor effect"
+			bind:value={settings.mouseMode}
+			options={[
+				{ value: 'repel', label: 'Repel' },
+				{ value: 'attract', label: 'Attract' }
+			]}
+		/>
 		<Slider
-			label="Cursor repel"
+			label="Cursor radius"
 			bind:value={settings.mouseRepel}
 			min={0}
 			max={200}
 			step={5}
 			unit=" px"
 			hint="Radius around the cursor. 0 turns it off."
+		/>
+		<Segmented
+			label="Click effect"
+			bind:value={settings.click}
+			options={[
+				{ value: 'off', label: 'Off' },
+				{ value: 'burst', label: 'Burst' },
+				{ value: 'ripple', label: 'Ripple' }
+			]}
 		/>
 		<Slider label="Tilt" bind:value={settings.tilt} min={0} max={15} step={1} unit="°" />
 		<Slider label="Shimmer" bind:value={settings.shimmer} min={0} max={2} step={0.05} />
@@ -239,6 +432,52 @@
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		border-top: 1px solid var(--line-strong);
 		border-left: 1px solid var(--line-strong);
+	}
+
+	.preset-cell {
+		position: relative;
+		display: grid;
+	}
+
+	.preset-delete {
+		position: absolute;
+		top: 6px;
+		right: 6px;
+		min-width: 22px;
+		height: 22px;
+		padding: 0 6px;
+		border: 1px solid transparent;
+		background: transparent;
+		color: var(--muted);
+		cursor: pointer;
+	}
+
+	.preset-delete:hover,
+	.preset-delete.armed {
+		border-color: var(--fg);
+		color: var(--fg);
+	}
+
+	.name-form {
+		display: flex;
+		gap: 8px;
+	}
+
+	.name-form input {
+		flex: 1;
+		min-width: 0;
+		min-height: 36px;
+		padding: 0 10px;
+		border: 1px solid var(--line-strong);
+		background: transparent;
+		color: var(--fg);
+		font-family: inherit;
+		font-size: 16px;
+	}
+
+	.name-form input:focus {
+		border-color: var(--fg);
+		outline: none;
 	}
 
 	.preset {

@@ -30,6 +30,9 @@ const DEFAULTS = deepFreeze({
   brightness: 0, // -0.5–0.5
   contrast: 1, // 0.5–2
   pointSize: 1, // particle size multiplier
+  colorMode: "palette", // "palette" uses main/shadow; "photo" keeps the photo's own colors
+  colorStrength: 1.4, // photo colors only: 0.5–2.5, makes pale, colorful areas (skin) more visible
+  shape: "square", // "square" | "circle" | "diamond" | "plus" | "line" | "ascii"
   theme: "auto", // "auto" | "light" | "dark"
   colors: {
     light: { main: "#0a0a0a", shadow: "#6b6b6b" },
@@ -41,13 +44,16 @@ const DEFAULTS = deepFreeze({
   edgeFade: 1, // dissolve the photo's hard crop at the sides and bottom (0–1)
   intro: { enabled: true, duration: 3 },
   morph: { auto: true, hold: 5.5, duration: 2.4 },
-  mouseRepel: 90, // repel radius in px, 0 = off
+  mouseRepel: 90, // cursor effect radius in px, 0 = off
+  mouseMode: "repel", // "repel" pushes particles away from the cursor, "attract" pulls them in
+  click: "off", // "off" | "burst" | "ripple" — what a click or tap does
   tilt: 4, // parallax tilt toward the cursor in degrees, 0 = off
   scrollScatter: true,
   shimmer: 1, // 0 = off
   dust: 160, // loose floating particles, 0 = off
   mobile: { enabled: true, densityScale: 0.6 },
   alt: "Particle portrait",
+  preserveDrawingBuffer: false, // keep frames readable, for screenshots and recording
   onReady: null,
   onShow: null,
 });
@@ -74,10 +80,21 @@ const SWIRL = 30; // px of curl on the path between two portraits
 const NATURAL_INTRO = 3;
 const NATURAL_MORPH = 2.9;
 
+// Particle shapes, drawn in the fragment shader. The index is what the shader receives.
+const SHAPES = ["square", "circle", "diamond", "plus", "line", "ascii"];
+// Each shape fills less of its square sprite than a plain square does; scale to match.
+const SHAPE_SCALE = [1, 1.1, 1.25, 1.5, 1.7, 2.6];
+const GLYPHS = " .:-=+*#%@"; // light to dense
+const GLYPH_CELL = 48;
+const CLICK_MODES = ["off", "burst", "ripple"];
+const CLICK_SECONDS = 4; // after this a click effect has fully settled
+
 const VERTEX = /* glsl */ `
   attribute float aSeed;
   attribute vec4 aFrom; // nx, ny, luminance, fade
   attribute vec4 aTo;
+  attribute vec3 aFromColor; // photo color, 0–1
+  attribute vec3 aToColor;
 
   uniform vec2 uResolution;
   uniform float uDpr;
@@ -91,20 +108,28 @@ const VERTEX = /* glsl */ `
   uniform float uSwirl;
   uniform vec2 uMouse;
   uniform float uRepel;
+  uniform float uAttract;
   uniform float uRadius;
   uniform vec2 uTilt;
   uniform float uScatter;
+  uniform vec2 uClickPos;
+  uniform float uClickAge;
+  uniform float uClickMode;
   uniform float uShimmer;
   uniform float uInvert;
   uniform float uBrightness;
   uniform float uContrast;
   uniform float uCell;
   uniform float uPointSize;
+  uniform float uShapeScale;
   uniform vec3 uMain;
   uniform vec3 uShadow;
   uniform float uOpacity;
+  uniform float uPhotoColor;
+  uniform float uColorStrength;
 
   varying vec4 vColor;
+  varying float vTone;
 
   float hash(float n) {
     return fract(sin(n) * 43758.5453);
@@ -123,6 +148,7 @@ const VERTEX = /* glsl */ `
     vec2 pos;
     float lum;
     float fade;
+    vec3 photo;
 
     if (uIntro > 0.5) {
       // Gather from dust: the face first, the edges follow.
@@ -134,6 +160,7 @@ const VERTEX = /* glsl */ `
       start += vec2(sin(uTime * 0.8 + seed * 90.0), cos(uTime * 0.6 + seed * 70.0)) * 6.0;
       pos = mix(start, toPos, spring(s, 4.5, 4.21));
       lum = aTo.z;
+      photo = aToColor;
       fade = aTo.w * smoothstep(-0.3, 0.6, s);
     } else {
       // Morph: a wave from the top of the old portrait to the bottom, curling like dust.
@@ -144,6 +171,7 @@ const VERTEX = /* glsl */ `
       pos += vec2(cos(seed * 80.0 + s * 3.0), sin(seed * 60.0 + s * 3.0)) * curl;
       float m = smoothstep(-0.1, 0.8, s);
       lum = mix(aFrom.z, aTo.z, m);
+      photo = mix(aFromColor, aToColor, m);
       fade = mix(aFrom.w, aTo.w, m);
     }
 
@@ -152,7 +180,16 @@ const VERTEX = /* glsl */ `
     // Light theme: dark pixels become solid ink. Dark theme: bright pixels glow.
     float ink = mix(lum, 1.0 - lum, uInvert);
     float tone = pow(smoothstep(0.03, 0.97, ink), 0.9);
-    float alpha = (0.12 + 0.88 * tone) * fade;
+    // Photo colors: anything that stands out from the page background is drawn as solid as
+    // the darkest ink, so pale skin is as crisp as black hair. Only what matches the page
+    // (white on a light page, black on a dark one) fades away.
+    float pageDistance = mix(max(max(photo.r, photo.g), photo.b), 1.0 - min(min(photo.r, photo.g), photo.b), uInvert);
+    float solid = smoothstep(0.03, 0.22 / uColorStrength, pageDistance);
+    // On a dark page the shading is what gives the face depth, so only colorful areas get a lift.
+    float chroma = max(max(photo.r, photo.g), photo.b) - min(min(photo.r, photo.g), photo.b);
+    float lift = clamp(chroma * 1.6, 0.0, 1.0);
+    float visible = max(tone, uPhotoColor * mix(lift, solid, uInvert));
+    float alpha = (0.12 + 0.88 * visible) * fade;
 
     alpha *= 1.0 - uShimmer * (0.14 - 0.14 * sin(uTime * 2.0 + seed * 50.0));
     pos += vec2(sin(uTime * 1.7 + seed * 40.0), cos(uTime * 1.3 + seed * 31.0)) * 0.3 * uShimmer;
@@ -163,16 +200,44 @@ const VERTEX = /* glsl */ `
     float d = length(away);
     if (uRepel > 0.0 && d < uRadius && d > 0.001) {
       float f = 1.0 - d / uRadius;
-      pos += away / d * f * f * uRadius * 0.7 * uRepel;
+      if (uAttract > 0.5) {
+        // Pulled toward the cursor: a fraction of the distance, so they gather but never overshoot.
+        pos -= away * min(f * f * 1.2, 0.92) * uRepel;
+      } else {
+        pos += away / d * f * f * uRadius * 0.7 * uRepel;
+      }
+    }
+
+    if (uClickMode > 0.5 && uClickAge < ${CLICK_SECONDS.toFixed(1)}) {
+      vec2 fromClick = pos - uClickPos;
+      float dist = max(length(fromClick), 0.001);
+      vec2 dir = fromClick / dist;
+      if (uClickMode < 1.5) {
+        // Burst: a blast out of the click point, then the particles gather back.
+        float a = (hash(seed * 29.0 + 3.0) - 0.5) * 1.4;
+        dir = vec2(dir.x * cos(a) - dir.y * sin(a), dir.x * sin(a) + dir.y * cos(a));
+        float reach = 1.0 - smoothstep(0.0, min(uResolution.x, uResolution.y) * 0.75, dist);
+        float push = (1.0 - exp(-uClickAge * 14.0)) * exp(-uClickAge * 1.7);
+        pos += dir * reach * push * (140.0 + hash(seed * 17.0 + 7.0) * 420.0);
+      } else {
+        // Ripple: a ring that travels outward and shoves particles as it passes.
+        float ring = dist - uClickAge * 640.0;
+        pos += dir * exp(-ring * ring / 4900.0) * exp(-uClickAge * 1.3) * 30.0;
+      }
     }
 
     float sa = hash(seed * 13.0 + 5.0) * 6.2831853;
     pos += vec2(cos(sa), sin(sa)) * uScatter * (80.0 + seed * 320.0) + vec2(0.0, -120.0 * uScatter);
     alpha *= 1.0 - uScatter * 0.8;
 
-    gl_PointSize = max(1.0, uCell * (0.3 + 0.3 * tone)) * uPointSize * uDpr;
+    gl_PointSize = max(1.0, uCell * (0.3 + 0.3 * visible) * uShapeScale) * uPointSize * uDpr;
     gl_Position = vec4(pos.x / uResolution.x * 2.0 - 1.0, 1.0 - pos.y / uResolution.y * 2.0, 0.0, 1.0);
-    vColor = vec4(mix(uShadow, uMain, tone), alpha * uOpacity);
+    // Slightly more saturated, and deeper on a light page, so the dots read as color.
+    float photoLuma = dot(photo, vec3(0.2126, 0.7152, 0.0722));
+    vec3 vivid = clamp(mix(vec3(photoLuma), photo, 1.0 + 0.4 * uColorStrength), 0.0, 1.0);
+    vivid = pow(vivid, vec3(1.0 + 0.8 * uInvert * uColorStrength));
+    vColor = vec4(mix(mix(uShadow, uMain, tone), vivid, uPhotoColor), alpha * uOpacity);
+    vTone = tone;
   }
 `;
 
@@ -209,6 +274,43 @@ const FRAGMENT = /* glsl */ `
   }
 `;
 
+// Main particles only; the dust stays plain squares (FRAGMENT).
+const SHAPE_FRAGMENT = /* glsl */ `
+  uniform float uShape;
+  uniform float uGlyphCount;
+  uniform sampler2D uGlyphs;
+
+  varying vec4 vColor;
+  varying float vTone;
+
+  void main() {
+    if (vColor.a < 0.004) discard;
+    vec2 p = gl_PointCoord - 0.5;
+    float cover = 1.0;
+
+    if (uShape > 4.5) {
+      // ASCII: pick a glyph by tone from the atlas.
+      float index = floor(clamp(vTone, 0.0, 1.0) * (uGlyphCount - 1.0) + 0.5);
+      cover = texture2D(uGlyphs, vec2((index + gl_PointCoord.x) / uGlyphCount, gl_PointCoord.y)).a;
+    } else if (uShape > 3.5) {
+      // Line: a diagonal stroke, thicker in the shadows.
+      float w = 0.07 + 0.2 * vTone;
+      cover = 1.0 - smoothstep(w - 0.04, w, abs(p.x + p.y) * 0.7071);
+    } else if (uShape > 2.5) {
+      float w = 0.09 + 0.1 * vTone;
+      cover = 1.0 - smoothstep(w - 0.04, w, min(abs(p.x), abs(p.y)));
+    } else if (uShape > 1.5) {
+      cover = 1.0 - smoothstep(0.42, 0.5, abs(p.x) + abs(p.y));
+    } else if (uShape > 0.5) {
+      cover = 1.0 - smoothstep(0.38, 0.5, length(p));
+    }
+
+    float alpha = vColor.a * cover;
+    if (alpha < 0.004) discard;
+    gl_FragColor = vec4(vColor.rgb, alpha);
+  }
+`;
+
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -222,6 +324,27 @@ function merge(base, patch) {
     out[key] = isObject(value) && isObject(base[key]) ? merge(base[key], value) : value;
   }
   return out;
+}
+
+/** White glyphs on transparent, one cell per character, light to dense. */
+function createGlyphAtlas(doc) {
+  const canvas = doc.createElement("canvas");
+  canvas.width = GLYPH_CELL * GLYPHS.length;
+  canvas.height = GLYPH_CELL;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${Math.round(GLYPH_CELL * 0.85)}px ui-monospace, Menlo, Consolas, monospace`;
+  for (let i = 0; i < GLYPHS.length; i++) {
+    ctx.fillText(GLYPHS[i], i * GLYPH_CELL + GLYPH_CELL / 2, GLYPH_CELL / 2 + GLYPH_CELL * 0.04);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.flipY = false;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  return texture;
 }
 
 function clamp(value, min, max) {
@@ -295,6 +418,7 @@ function sample(img, cols, sharpen, edgeFade, autoLevels) {
   if (autoLevels) stretchLevels(lum, alpha);
 
   const out = [];
+  const colors = [];
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
@@ -326,9 +450,10 @@ function sample(img, cols, sharpen, edgeFade, autoLevels) {
         clamp(lum[i] + sharpen * (lum[i] - blur / n), 0, 1),
         fade,
       );
+      colors.push(data[i * 4] / 255, data[i * 4 + 1] / 255, data[i * 4 + 2] / 255);
     }
   }
-  return { aspect: cols / rows, data: out, count: out.length / 4 };
+  return { aspect: cols / rows, data: out, colors, count: out.length / 4 };
 }
 
 /**
@@ -340,6 +465,7 @@ function buildPool(sampled) {
   const total = Math.max(1, ...sampled.map((s) => s.count));
   const targets = sampled.map((s) => {
     const array = new Float32Array(total * 4);
+    const color = new Float32Array(total * 3);
     let prev = -1;
     for (let i = 0; i < total; i++) {
       const j = Math.floor((i * s.count) / total);
@@ -347,9 +473,12 @@ function buildPool(sampled) {
       array[i * 4 + 1] = s.data[j * 4 + 1];
       array[i * 4 + 2] = s.data[j * 4 + 2];
       array[i * 4 + 3] = j === prev ? 0 : s.data[j * 4 + 3];
+      color[i * 3] = s.colors[j * 3];
+      color[i * 3 + 1] = s.colors[j * 3 + 1];
+      color[i * 3 + 2] = s.colors[j * 3 + 2];
       prev = j;
     }
-    return { aspect: s.aspect, count: s.count, data: array };
+    return { aspect: s.aspect, count: s.count, data: array, color };
   });
   const seeds = new Float32Array(total);
   for (let i = 0; i < total; i++) seeds[i] = hash(i * 0.618, 1.37);
@@ -399,6 +528,7 @@ export function createPortrait(container, options = {}) {
   let material = null;
   let dustPoints = null;
   let dustMaterial = null;
+  let glyphs = null;
   let fallback = null;
 
   // Particle data
@@ -423,6 +553,7 @@ export function createPortrait(container, options = {}) {
   let motion = !mqReduce.matches;
   const pointer = { x: -1e4, y: -1e4, tx: -1e4, ty: -1e4, active: false, repel: 0, nx: 0, ny: 0 };
   const tilt = { x: 0, y: 0 };
+  let click = { x: 0, y: 0, at: -1 }; // `at` is on the animation clock; -1 = none yet
   let scrollTarget = 0;
   let scroll = 0;
 
@@ -498,6 +629,7 @@ export function createPortrait(container, options = {}) {
         canvas,
         alpha: true,
         antialias: false,
+        preserveDrawingBuffer: !!opts.preserveDrawingBuffer,
         powerPreference: "high-performance",
       });
     } catch {
@@ -523,7 +655,7 @@ export function createPortrait(container, options = {}) {
     };
     material = new THREE.ShaderMaterial({
       vertexShader: VERTEX,
-      fragmentShader: FRAGMENT,
+      fragmentShader: SHAPE_FRAGMENT,
       transparent: true,
       depthTest: false,
       depthWrite: false,
@@ -538,6 +670,10 @@ export function createPortrait(container, options = {}) {
         uSwirl: { value: SWIRL },
         uMouse: { value: new THREE.Vector2(-1e4, -1e4) },
         uRepel: { value: 0 },
+        uAttract: { value: 0 },
+        uClickPos: { value: new THREE.Vector2(-1e4, -1e4) },
+        uClickAge: { value: 99 },
+        uClickMode: { value: 0 },
         uRadius: { value: 90 },
         uTilt: { value: new THREE.Vector2() },
         uShimmer: { value: 1 },
@@ -546,6 +682,12 @@ export function createPortrait(container, options = {}) {
         uContrast: { value: 1 },
         uCell: { value: 4 },
         uPointSize: { value: 1 },
+        uShapeScale: { value: 1 },
+        uPhotoColor: { value: 0 },
+        uColorStrength: { value: 1.4 },
+        uShape: { value: 0 },
+        uGlyphCount: { value: GLYPHS.length },
+        uGlyphs: { value: null },
         uShadow: { value: new THREE.Vector3() },
       },
     });
@@ -583,6 +725,8 @@ export function createPortrait(container, options = {}) {
     }
     material?.dispose();
     dustMaterial?.dispose();
+    glyphs?.dispose();
+    glyphs = null;
     material = null;
     dustMaterial = null;
     if (renderer) {
@@ -653,6 +797,8 @@ export function createPortrait(container, options = {}) {
     geometry.setAttribute("aSeed", new THREE.BufferAttribute(pool.seeds, 1));
     geometry.setAttribute("aFrom", new THREE.BufferAttribute(new Float32Array(pool.total * 4), 4));
     geometry.setAttribute("aTo", new THREE.BufferAttribute(new Float32Array(pool.total * 4), 4));
+    geometry.setAttribute("aFromColor", new THREE.BufferAttribute(new Float32Array(pool.total * 3), 3));
+    geometry.setAttribute("aToColor", new THREE.BufferAttribute(new Float32Array(pool.total * 3), 3));
     boundFrom = -1;
     boundTo = -1;
     points = new THREE.Points(geometry, material);
@@ -692,12 +838,18 @@ export function createPortrait(container, options = {}) {
       const attribute = points.geometry.getAttribute("aFrom");
       attribute.array.set(pool.targets[from].data);
       attribute.needsUpdate = true;
+      const color = points.geometry.getAttribute("aFromColor");
+      color.array.set(pool.targets[from].color);
+      color.needsUpdate = true;
       boundFrom = from;
     }
     if (boundTo !== to) {
       const attribute = points.geometry.getAttribute("aTo");
       attribute.array.set(pool.targets[to].data);
       attribute.needsUpdate = true;
+      const color = points.geometry.getAttribute("aToColor");
+      color.array.set(pool.targets[to].color);
+      color.needsUpdate = true;
       boundTo = to;
     }
     const u = material.uniforms;
@@ -755,7 +907,18 @@ export function createPortrait(container, options = {}) {
     u.uBrightness.value = clamp(opts.brightness, -1, 1);
     u.uContrast.value = clamp(opts.contrast, 0, 4);
     u.uPointSize.value = Math.max(0.1, opts.pointSize);
+    u.uPhotoColor.value = opts.colorMode === "photo" ? 1 : 0;
+    u.uColorStrength.value = clamp(opts.colorStrength, 0.2, 3);
+    u.uClickMode.value = motion ? Math.max(0, CLICK_MODES.indexOf(opts.click)) : 0;
+    const shape = Math.max(0, SHAPES.indexOf(opts.shape));
+    u.uShape.value = shape;
+    u.uShapeScale.value = SHAPE_SCALE[shape];
+    if (shape === SHAPES.indexOf("ascii") && !glyphs) {
+      glyphs = createGlyphAtlas(doc);
+      u.uGlyphs.value = glyphs;
+    }
     u.uRadius.value = Math.max(1, opts.mouseRepel);
+    u.uAttract.value = opts.mouseMode === "attract" ? 1 : 0;
     u.uShimmer.value = motion ? clamp(opts.shimmer, 0, 3) : 0;
     u.uSpeed.value = transitionSpeed();
     if (dustPoints) dustPoints.visible = opts.dust > 0;
@@ -878,6 +1041,8 @@ export function createPortrait(container, options = {}) {
     u.uTime.value = clock;
     u.uMouse.value.set(pointer.x, pointer.y);
     u.uRepel.value = pointer.repel;
+    u.uClickPos.value.set(click.x, click.y);
+    u.uClickAge.value = click.at < 0 ? 99 : clock - click.at;
     u.uTilt.value.set(Math.sin(tilt.x), Math.sin(tilt.y));
     u.uScatter.value = scroll;
     renderer.render(scene, camera);
@@ -918,6 +1083,13 @@ export function createPortrait(container, options = {}) {
       pointer.y = pointer.ty;
     }
     pointer.active = true;
+    wake();
+  }
+
+  function onPointerDown(event) {
+    onPointerMove(event);
+    if (!motion || !opts.click || opts.click === "off") return;
+    click = { x: pointer.tx, y: pointer.ty, at: clock };
     wake();
   }
 
@@ -989,7 +1161,7 @@ export function createPortrait(container, options = {}) {
   doc.addEventListener("visibilitychange", onVisibility);
   win.addEventListener("scroll", onScroll, { passive: true });
   container.addEventListener("pointermove", onPointerMove);
-  container.addEventListener("pointerdown", onPointerMove);
+  container.addEventListener("pointerdown", onPointerDown);
   container.addEventListener("pointerup", onPointerEnd);
   container.addEventListener("pointerleave", onPointerEnd);
   container.addEventListener("pointercancel", onPointerEnd);
@@ -1063,7 +1235,7 @@ export function createPortrait(container, options = {}) {
       doc.removeEventListener("visibilitychange", onVisibility);
       win.removeEventListener("scroll", onScroll);
       container.removeEventListener("pointermove", onPointerMove);
-      container.removeEventListener("pointerdown", onPointerMove);
+      container.removeEventListener("pointerdown", onPointerDown);
       container.removeEventListener("pointerup", onPointerEnd);
       container.removeEventListener("pointerleave", onPointerEnd);
       container.removeEventListener("pointercancel", onPointerEnd);

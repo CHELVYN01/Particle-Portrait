@@ -3,21 +3,26 @@ import { context2d, createCanvas } from './canvas';
 export const OUTPUT_WIDTH = 280;
 
 export type EncodedPortrait = {
+	/** Grayscale + alpha: all the engine needs when particles use the palette. */
 	dataUrl: string;
 	bytes: number;
+	/** Same portrait in full color, for "photo colors" mode. Larger. */
+	colorDataUrl: string;
 	width: number;
 	height: number;
 };
 
 /**
- * Downscales to OUTPUT_WIDTH and encodes a grayscale + alpha PNG. The engine
- * only reads luminance, and dropping the colour channels roughly halves the
- * file compared to canvas.toDataURL().
+ * Downscales to OUTPUT_WIDTH and encodes a grayscale + alpha PNG. With the
+ * palette the engine only reads luminance, and dropping the colour channels
+ * roughly halves the file compared to canvas.toDataURL(). The colour version is
+ * kept too, for "photo colors" mode.
  */
 export async function toDataUrl(canvas: HTMLCanvasElement): Promise<EncodedPortrait> {
 	const scaled = downscale(canvas, OUTPUT_WIDTH);
 	const { width, height } = scaled;
 	const { data } = context2d(scaled).getImageData(0, 0, width, height);
+	const colorDataUrl = scaled.toDataURL('image/png');
 
 	const pixels = new Uint8Array(width * height * 2);
 	for (let i = 0; i < width * height; i++) {
@@ -31,11 +36,22 @@ export async function toDataUrl(canvas: HTMLCanvasElement): Promise<EncodedPortr
 
 	try {
 		const png = await encodeGrayAlphaPng(pixels, width, height);
-		return { dataUrl: `data:image/png;base64,${toBase64(png)}`, bytes: png.length, width, height };
+		return {
+			dataUrl: `data:image/png;base64,${toBase64(png)}`,
+			bytes: png.length,
+			colorDataUrl,
+			width,
+			height
+		};
 	} catch {
 		// No CompressionStream: fall back to the browser's (larger) RGBA PNG.
-		const dataUrl = scaled.toDataURL('image/png');
-		return { dataUrl, bytes: Math.round(((dataUrl.length - 22) * 3) / 4), width, height };
+		return {
+			dataUrl: colorDataUrl,
+			bytes: Math.round(((colorDataUrl.length - 22) * 3) / 4),
+			colorDataUrl,
+			width,
+			height
+		};
 	}
 }
 

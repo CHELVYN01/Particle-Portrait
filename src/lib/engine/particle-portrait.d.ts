@@ -5,6 +5,14 @@
 
 export type PortraitTheme = 'auto' | 'light' | 'dark';
 
+export type PortraitColorMode = 'palette' | 'photo';
+
+export type PortraitCursor = 'repel' | 'attract';
+
+export type PortraitClick = 'off' | 'burst' | 'ripple';
+
+export type PortraitShape = 'square' | 'circle' | 'diamond' | 'plus' | 'line' | 'ascii';
+
 export interface PortraitPalette {
 	/** Color of the brightest-reading particles. Any CSS color. */
 	main: string;
@@ -27,8 +35,14 @@ export interface PortraitOptions {
 	contrast: number;
 	/** Particle size multiplier. */
 	pointSize: number;
+	/** How each particle is drawn. `ascii` picks a character by tone. */
+	shape: PortraitShape;
 	/** `auto` follows `prefers-color-scheme` and a `dark` / `light` class or `data-theme` on `<html>`. */
 	theme: PortraitTheme;
+	/** `palette` colors particles with `colors`; `photo` keeps the colors of the photo itself. */
+	colorMode: PortraitColorMode;
+	/** With `photo` colors: makes pale but colorful areas such as skin more visible. 0.5–2.5. */
+	colorStrength: number;
 	colors: { light: PortraitPalette; dark: PortraitPalette };
 	/** 0–1 per theme. */
 	opacity: { light: number; dark: number };
@@ -41,8 +55,12 @@ export interface PortraitOptions {
 	intro: { enabled: boolean; duration: number };
 	/** With several images: `hold` seconds between morphs, `duration` seconds per morph. */
 	morph: { auto: boolean; hold: number; duration: number };
-	/** Cursor repel radius in px. 0 = off. */
+	/** Cursor effect radius in px. 0 = off. */
 	mouseRepel: number;
+	/** `repel` pushes particles away from the cursor, `attract` pulls them toward it. */
+	mouseMode: PortraitCursor;
+	/** What a click or tap does. `burst` blasts the particles out of the point, then they gather back; `ripple` sends a wave through them. */
+	click: PortraitClick;
 	/** Parallax tilt toward the cursor, in degrees. 0 = off. */
 	tilt: number;
 	/** Scatter the particles as the portrait scrolls out of view. */
@@ -55,6 +73,8 @@ export interface PortraitOptions {
 	mobile: { enabled: boolean; densityScale: number };
 	/** `aria-label` of the canvas and `alt` of the fallback image. */
 	alt: string;
+	/** Keep each frame readable after it is drawn, so the canvas can be screenshotted or recorded. Slightly slower. Read once, when the canvas is created. */
+	preserveDrawingBuffer: boolean;
 	/** Called once, after the first frame is drawn. */
 	onReady: (() => void) | null;
 	/** Called when a portrait starts showing (intro or morph), with its index. */

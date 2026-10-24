@@ -5,14 +5,22 @@
 		value: T;
 		/** Hide the label visually (still announced). */
 		compact?: boolean;
+		/** Lay the options out in a grid of this many columns instead of one row. */
+		columns?: number;
 	};
 
-	let { label, options, value = $bindable(), compact = false }: Props = $props();
+	let { label, options, value = $bindable(), compact = false, columns = 0 }: Props = $props();
 </script>
 
 <div class="segmented" class:compact>
 	<span class="mono label" class:visually-hidden={compact}>{label}</span>
-	<div class="options" role="radiogroup" aria-label={label}>
+	<div
+		class="options"
+		class:grid={columns > 0}
+		style:grid-template-columns={columns > 0 ? `repeat(${columns}, 1fr)` : undefined}
+		role="radiogroup"
+		aria-label={label}
+	>
 		{#each options as option (option.value)}
 			<button
 				type="button"
@@ -36,6 +44,17 @@
 	.options {
 		display: flex;
 		border: 1px solid var(--line-strong);
+	}
+
+	/* One-pixel gaps show the background, which draws the cell borders. */
+	.options.grid {
+		display: grid;
+		gap: 1px;
+		background: var(--line-strong);
+	}
+
+	.options.grid button {
+		border-left: 0;
 	}
 
 	button {

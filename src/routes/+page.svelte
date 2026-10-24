@@ -56,7 +56,12 @@
 	let buildTimer: ReturnType<typeof setTimeout> | undefined;
 
 	let editing = $derived(photos.length > 0);
-	let sources = $derived(photos.length ? photos.map((entry) => entry.photo.dataUrl) : SAMPLES);
+	// The preview always reads the color version (same luminance, so the palette look is identical).
+	let sources = $derived(photos.length ? photos.map((entry) => entry.photo.colorDataUrl) : SAMPLES);
+	// The export carries only what the chosen color mode needs: the gray PNG is about half the size.
+	let exportImages = $derived(
+		photos.map((entry) => (settings.colorMode === 'photo' ? entry.photo.colorDataUrl : entry.photo.dataUrl))
+	);
 	let busy = $derived(job?.kind === 'processing');
 
 	// Settings (never the photos) survive a refresh.
@@ -281,7 +286,7 @@
 					<ul class="photos">
 						{#each photos as entry, index (entry.id)}
 							<li class="photo">
-								<img class="thumb" src={entry.photo.dataUrl} alt="" />
+								<img class="thumb" src={entry.photo.colorDataUrl} alt="" />
 								<div class="photo-info">
 									<p class="photo-name">{entry.file.name}</p>
 									<p class="mono muted photo-meta">{describe(entry.photo)}</p>
@@ -315,7 +320,7 @@
 
 				<Panel bind:settings photoCount={photos.length} />
 
-				<ExportBar images={photos.map((entry) => entry.photo.dataUrl)} {settings} />
+				<ExportBar images={exportImages} {settings} />
 
 				<PrivacyNote />
 			</section>

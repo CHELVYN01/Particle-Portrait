@@ -1,14 +1,20 @@
 import { DEFAULT_OPTIONS, type PortraitOptions } from '#lib/engine/particle-portrait.js';
 
 /** Everything the panel edits — the engine options minus the photos and callbacks. */
-export type Settings = Omit<PortraitOptions, 'image' | 'onReady' | 'onShow'>;
+export type Settings = Omit<PortraitOptions, 'image' | 'preserveDrawingBuffer' | 'onReady' | 'onShow'>;
 
 export type DeepPartial<T> = {
 	[K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
 };
 
 export function defaultSettings(): Settings {
-	const { image: _image, onReady: _onReady, onShow: _onShow, ...settings } = DEFAULT_OPTIONS;
+	const {
+		image: _image,
+		preserveDrawingBuffer: _preserve,
+		onReady: _onReady,
+		onShow: _onShow,
+		...settings
+	} = DEFAULT_OPTIONS;
 	return structuredClone(settings);
 }
 

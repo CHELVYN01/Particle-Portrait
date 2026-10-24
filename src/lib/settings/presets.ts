@@ -5,6 +5,8 @@ export type Preset = {
 	name: string;
 	description: string;
 	patch: DeepPartial<Settings>;
+	/** Saved by the user (in this browser), not shipped with the tool. */
+	custom?: boolean;
 };
 
 export const PRESETS: Preset[] = [
@@ -72,6 +74,46 @@ export const PRESETS: Preset[] = [
 				dark: { main: '#ffffff', shadow: '#b5b5b5' }
 			}
 		}
+	},
+	{
+		id: 'ascii',
+		name: 'ASCII',
+		description: 'Built from text characters.',
+		patch: {
+			shape: 'ascii',
+			density: 130,
+			sharpen: 1.4,
+			contrast: 1.2,
+			shimmer: 0.4,
+			dust: 60
+		}
+	},
+	{
+		id: 'sketch',
+		name: 'Sketch',
+		description: 'Pen hatching, like an engraving.',
+		patch: {
+			shape: 'line',
+			density: 200,
+			sharpen: 1.6,
+			contrast: 1.2,
+			shimmer: 0.3,
+			dust: 40
+		}
+	},
+	{
+		id: 'color',
+		name: 'Color',
+		description: "Round dots in the photo's own colors.",
+		patch: {
+			colorMode: 'photo',
+			shape: 'circle',
+			density: 200,
+			pointSize: 1.1,
+			contrast: 1.1,
+			shimmer: 0.6,
+			dust: 100
+		}
 	}
 ];
 
@@ -80,8 +122,8 @@ export function presetSettings(preset: Preset): Settings {
 }
 
 /** The preset the settings currently match, ignoring alt text and theme lock. */
-export function matchPreset(settings: Settings): Preset | null {
+export function matchPreset(settings: Settings, saved: Preset[] = []): Preset | null {
 	const comparable = (s: Settings) => JSON.stringify({ ...s, alt: '', theme: 'auto' });
 	const current = comparable(settings);
-	return PRESETS.find((preset) => comparable(presetSettings(preset)) === current) ?? null;
+	return [...PRESETS, ...saved].find((preset) => comparable(presetSettings(preset)) === current) ?? null;
 }

@@ -1,4 +1,4 @@
-import { defaultSettings, mergeSettings, type Settings } from './defaults';
+import { defaultSettings, mergeSettings, type DeepPartial, type Settings } from './defaults';
 
 // Settings travel in the URL hash, so they never reach a server. Photos are never included.
 const PREFIX = '#s=v1.';
@@ -36,12 +36,16 @@ function fromBase64Url(payload: string) {
 	return new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)));
 }
 
-/** The hash (including `#`) that reproduces `settings`. */
-export function encodeSettings(settings: Settings) {
-	const defaults = defaultSettings();
+/** Only what differs from the defaults, without the site-specific fields (`alt`, `theme`). */
+export function settingsPatch(settings: Settings): DeepPartial<Settings> {
 	const shared = { ...settings };
 	for (const key of LOCAL_KEYS) delete (shared as Partial<Settings>)[key];
-	return PREFIX + toBase64Url(JSON.stringify(diff(defaults, shared) ?? {}));
+	return (diff(defaultSettings(), shared) ?? {}) as DeepPartial<Settings>;
+}
+
+/** The hash (including `#`) that reproduces `settings`. */
+export function encodeSettings(settings: Settings) {
+	return PREFIX + toBase64Url(JSON.stringify(settingsPatch(settings)));
 }
 
 /** Settings from a share hash, or null when `hash` is not a valid share link. */
