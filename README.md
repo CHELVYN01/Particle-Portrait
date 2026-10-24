@@ -12,7 +12,7 @@ Your photo never leaves your device. There is no upload, no server-side processi
 
 ## Features
 
-- **Photo pipeline.** JPG, PNG and WebP up to 15 MB. EXIF orientation is honored and the longest side is capped at 1024 px.
+- **Photo pipeline.** JPG, PNG, WebP and HEIC (iPhone photos) up to 15 MB. HEIC is decoded on-device by a decoder that loads only when needed. EXIF orientation is honored and the longest side is capped at 1024 px.
 - **Background removal.** On-device person segmentation with [MediaPipe](https://ai.google.dev/edge/mediapipe) (Selfie Segmenter). The model and the WASM runtime are self-hosted, with no third-party CDN at runtime. It is optional: skip it if your photo already has a transparent background.
 - **Live editor.** Density, sharpening, auto-levels, brightness, contrast, particle size, light and dark palettes, opacity, alignment, edge fade, intro, morph timing, cursor repel, tilt, scroll scatter, shimmer, dust and mobile behavior.
 - **Presets.** Subtle, Bold, Ghost and Ink as starting points.
@@ -48,6 +48,7 @@ On screens ≤ 768 px you can scale the density down, or disable the engine and 
 - [SvelteKit](https://svelte.dev/docs/kit) 3 and Svelte 5, TypeScript, Vite
 - [three.js](https://threejs.org/) for rendering
 - [@mediapipe/tasks-vision](https://www.npmjs.com/package/@mediapipe/tasks-vision) for background removal
+- [heic-to](https://github.com/hoppergee/heic-to) (LGPL-3.0) to decode HEIC photos, loaded only when a HEIC file is chosen
 - [JSZip](https://stuk.github.io/jszip/) for export, loaded only when you export
 - [Bun](https://bun.sh/) as the package manager
 
@@ -99,7 +100,7 @@ The app currently uses `@sveltejs/adapter-auto`. For a predictable deploy, insta
 
 ## Browser support
 
-A browser with WebGL and `createImageBitmap`. HEIC photos are not decoded by most browsers, so convert them to JPG or PNG first.
+A browser with WebGL and `createImageBitmap`. HEIC is decoded natively in Safari and by a bundled decoder elsewhere.
 
 ## License
 

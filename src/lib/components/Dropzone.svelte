@@ -67,7 +67,7 @@
 		<input
 			class="visually-hidden"
 			type="file"
-			accept="image/*"
+			accept="image/*,.heic,.heif"
 			aria-describedby="{id}-hint{error ? ` ${id}-error` : ''}"
 			onchange={onChange}
 		/>
@@ -78,7 +78,7 @@
 		<span class="title">{dragging ? 'Release to upload' : title}</span>
 		<span class="action mono">or click to browse</span>
 		<span class="hint mono" id="{id}-hint">
-			JPG · PNG · WebP — max {formatMB(MAX_FILE_BYTES)} — front-facing works best
+			JPG · PNG · WebP · HEIC — max {formatMB(MAX_FILE_BYTES)} — front-facing works best
 		</span>
 	</label>
 
