@@ -339,7 +339,7 @@
 
 	<footer class="footer">
 		<span class="mono muted">Made by <a href="https://chelvynkleden.com">chelvynkleden.com</a></span>
-		<span class="mono muted">Exports are MIT licensed</span>
+		<span class="mono muted">Exports are free for noncommercial use</span>
 	</footer>
 </div>
 

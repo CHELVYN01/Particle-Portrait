@@ -192,6 +192,6 @@ portrait.destroy();
 
 ## License
 
-MIT — free to use, modify and ship. Credit is kept in the file header; no watermark.
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0): free for personal, educational and other noncommercial use. Commercial use needs permission from the author. Keep the notice in the file header; there is no watermark.
 `;
 }

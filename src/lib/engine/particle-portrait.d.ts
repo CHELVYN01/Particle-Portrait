@@ -1,6 +1,6 @@
 /**
  * particle-portrait.js — types
- * Made with https://particle-portrait.chelvynkleden.com · MIT License
+ * Made with https://particle-portrait.chelvynkleden.com · PolyForm Noncommercial 1.0.0
  */
 
 export type PortraitTheme = 'auto' | 'light' | 'dark';

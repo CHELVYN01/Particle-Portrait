@@ -3,7 +3,9 @@
  * A living particle portrait for your website, rendered with three.js.
  * Made with https://particle-portrait.chelvynkleden.com
  *
- * MIT License — free to use, modify and ship.
+ * License: PolyForm Noncommercial 1.0.0 (https://polyformproject.org/licenses/noncommercial/1.0.0)
+ * Free for noncommercial use. Commercial use needs permission.
+ * Required Notice: Copyright (c) 2026 Chelvyn Kleden (https://particle-portrait.chelvynkleden.com)
  *
  * Usage:
  *   import { createPortrait } from "./particle-portrait.js";
