@@ -773,6 +773,13 @@ export function createPortrait(container, options = {}) {
         pool.cols = cols;
         from = to = newImages ? 0 : Math.min(to, pool.targets.length - 1);
         queued = -1;
+        // The old buffers were sized for the old pool; drop them before layout() tries to
+        // fill them with the new one (a bigger pool would not fit).
+        if (points) {
+          points.geometry.dispose();
+          scene.remove(points);
+          points = null;
+        }
         layout();
         buildPoints();
         // New photos gather from dust; a density or sharpen change just swaps in place.
